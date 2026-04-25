@@ -32,6 +32,7 @@ def load_normal_data_csv():
             
     temp_date = pd.to_datetime(df["日付"], errors="coerce")
     df["日付"] = pd.to_datetime(f"{ALIGN_YEAR}-" + temp_date.dt.strftime('%m-%d'), errors="coerce")
+    
     # CSVに降水量の平年値がない場合は0を入れておく
     if "平年降水量" not in df.columns:
         df["平年降水量"] = 0
@@ -87,8 +88,10 @@ def fetch_weather_data_by_year(target_year):
     current_year = now.year
     
     start_date = f"{target_year}-01-01"
+    
+    # 🌟 修正箇所：今年の場合はAPIの遅延を考慮して「7日前」までを取得する
     if target_year == current_year:
-        end_date = (now - timedelta(days=5)).strftime('%Y-%m-%d')
+        end_date = (now - timedelta(days=7)).strftime('%Y-%m-%d')
     else:
         end_date = f"{target_year}-12-31"
     
@@ -113,7 +116,10 @@ def fetch_weather_data_by_year(target_year):
             "気温": loc_data["daily"]["temperature_2m_mean"],
             "降水量": loc_data["daily"]["precipitation_sum"]
         })
-        df = df.dropna(subset=["フル日付"])
+        
+        # 🌟 修正箇所：気温データが空（null）の日付も削除してグラフ描画エラーを防ぐ
+        df = df.dropna(subset=["フル日付", "気温"])
+        
         df["日付"] = pd.to_datetime(f"{ALIGN_YEAR}-" + df["フル日付"].dt.strftime('%m-%d'), errors="coerce")
         result_dict[loc] = df
         
@@ -132,14 +138,15 @@ with st.spinner("過去10年間の平均データを構築しています..."):
 current_year = datetime.now().year
 st.sidebar.header("⚙️ データ設定")
 
-years_options = [current_year, current_year-1, current_year-2]
-selected_year = st.sidebar.selectbox("表示・比較する年を選択", years_options, index=1)
+years_options = [current_year, current_year-1, current_year-2, current_year-3]
+selected_year = st.sidebar.selectbox("表示・比較する年を選択", years_options, index=0)
 
 normal_type = st.sidebar.radio(
     "基準とする平年値のデータ元", 
     ["過去10年平均 (Open-Meteo Archive)", "気象庁平年値 (CSVファイル)"]
 )
 
+# 選択された平年値データをセット
 if normal_type == "気象庁平年値 (CSVファイル)" and not df_normal_csv.empty:
     df_normal = df_normal_csv
 else:
@@ -182,6 +189,7 @@ if mode == "平年値と選択した年の比較":
         if show_precip and "平年降水量" in n_data.columns:
             fig.add_trace(go.Scatter(x=n_data["日付"], y=n_data["平年降水量"], name="平年降水量", line=dict(dash='dot', color='lightblue', width=2), fill='tozeroy'), secondary_y=True)
     
+    # 選択年の描画
     if not c_data.empty:
         fig.add_trace(go.Scatter(x=c_data["日付"], y=c_data["気温"], name=f"{selected_year}年の気温", line=dict(color='blue', width=2)), secondary_y=False)
         if show_precip:
@@ -203,7 +211,7 @@ elif mode == "2地点間の比較":
     
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    # 地点1
+    # 地点1の描画
     if not n1.empty:
         fig.add_trace(go.Scatter(x=n1["日付"], y=n1["平年気温"], name=f"{loc1} (平年気温)", line=dict(dash='dot', color='royalblue')), secondary_y=False)
         if show_precip and "平年降水量" in n1.columns:
@@ -214,7 +222,7 @@ elif mode == "2地点間の比較":
         if show_precip:
             fig.add_trace(go.Bar(x=c1["日付"], y=c1["降水量"], name=f"{loc1} ({selected_year}年降水)", marker_color='rgba(65, 105, 225, 0.3)'), secondary_y=True)
             
-    # 地点2
+    # 地点2の描画
     if not n2.empty:
         fig.add_trace(go.Scatter(x=n2["日付"], y=n2["平年気温"], name=f"{loc2} (平年気温)", line=dict(dash='dot', color='indianred')), secondary_y=False)
         if show_precip and "平年降水量" in n2.columns:
