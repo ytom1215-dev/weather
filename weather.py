@@ -238,3 +238,57 @@ elif mode == "2地点間の比較":
     fig.update_yaxes(title_text="降水量 (mm)", secondary_y=True, showgrid=False)
     fig.update_xaxes(tickformat="%m/%d")
     st.plotly_chart(fig, use_container_width=True)
+# --- 7. データダウンロード機能 (コードの最後に追加) ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("📥 データのダウンロード")
+
+def convert_df_to_csv(df):
+    # Excelでの文字化け防止のため utf-8-sig を使用
+    return df.to_csv(index=False).encode('utf_8_sig')
+
+if mode == "平年値と選択した年の比較":
+    if not c_data.empty:
+        # ダウンロード用にデータを整理
+        # 平年値データがある場合は結合して表示
+        if not n_data.empty:
+            dl_df = pd.merge(
+                n_data[['日付', '平年気温', '平年降水量']], 
+                c_data[['日付', '気温', '降水量']], 
+                on='日付', how='outer'
+            ).rename(columns={'気温': f'{selected_year}年気温', '降水量': f'{selected_year}年降水量'})
+        else:
+            dl_df = c_data.copy()
+            
+        # 日付を見やすく整形（元の2024年設定から月日のみに）
+        dl_df['日付'] = dl_df['日付'].dt.strftime('%m-%d')
+        
+        csv_data = convert_df_to_csv(dl_df)
+        st.sidebar.download_button(
+            label=f"📊 {target}のデータをCSV保存",
+            data=csv_data,
+            file_name=f"weather_data_{target}_{selected_year}.csv",
+            mime='text/csv',
+        )
+
+elif mode == "2地点間の比較":
+    # 2地点のデータを結合
+    try:
+        # 地点1
+        d1 = c1[['日付', '気温', '降水量']].copy()
+        d1.columns = ['日付', f'{loc1}_気温', f'{loc1}_降水量']
+        # 地点2
+        d2 = c2[['日付', '気温', '降水量']].copy()
+        d2.columns = ['日付', f'{loc2}_気温', f'{loc2}_降水量']
+        
+        dl_df_comp = pd.merge(d1, d2, on='日付', how='outer')
+        dl_df_comp['日付'] = dl_df_comp['日付'].dt.strftime('%m-%d')
+        
+        csv_data_comp = convert_df_to_csv(dl_df_comp)
+        st.sidebar.download_button(
+            label=f"📊 2地点比較データをCSV保存",
+            data=csv_data_comp,
+            file_name=f"comparison_{loc1}_vs_{loc2}_{selected_year}.csv",
+            mime='text/csv',
+        )
+    except Exception as e:
+        st.sidebar.info("データ準備中...")
